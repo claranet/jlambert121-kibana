@@ -4,20 +4,25 @@
 #  Defined type to manage kibana plugins
 #
 define kibana::plugin(
-  $source,
+  $source       = undef,
+  $url          = undef,
   $ensure       = 'present',
   $install_root = $::kibana::install_path,
   $group        = $::kibana::group,
   $user         = $::kibana::user) {
 
-  # plugins must be formatted <org>/<plugin>/<version>
-  $filenameArray = split($source, '/')
-  $base_module_name = $filenameArray[-2]
+  if ($source != undef) {
+    # plugins must be formatted <org>/<plugin>/<version>
+    $filenameArray = split($source, '/')
+    $base_module_name = $filenameArray[-2]
+  } elsif ($url != undef) {
+    $base_module_name = $url
+  }
 
   # borrowed heavily from https://github.com/elastic/puppet-elasticsearch/blob/master/manifests/plugin.pp
-  $plugins_dir = "${install_root}/kibana/installedPlugins"
-  $install_cmd = "kibana plugin --install ${source}"
-  $uninstall_cmd = "kibana plugin --remove ${base_module_name}"
+  $plugins_dir = "${install_root}/kibana/plugins"
+  $install_cmd = "${install_root}/kibana/bin/kibana-plugin install ${base_module_name}"
+  $uninstall_cmd = "${install_root}/kibana/bin/kibana-plugin remove ${title}"
 
   Exec {
     path      => [ '/bin', '/usr/bin', '/usr/sbin', "${install_root}/kibana/bin" ],
@@ -30,8 +35,8 @@ define kibana::plugin(
 
   case $ensure {
     'installed', 'present': {
-      $name_file_path = "${plugins_dir}/${base_module_name}/.name"
-      exec {"install_plugin_${name}":
+      $name_file_path = "${plugins_dir}/${title}/.name"
+      exec {"install_plugin_${title}":
         command => $install_cmd,
         creates => $name_file_path,
         notify  => Service['kibana'],
@@ -40,11 +45,11 @@ define kibana::plugin(
       file {$name_file_path:
         ensure  => file,
         content => $base_module_name,
-        require => Exec["install_plugin_${base_module_name}"],
+        require => Exec["install_plugin_${title}"],
       }
     }
     'absent': {
-      exec {"remove_plugin_${base_module_name}":
+      exec {"remove_plugin_${title}":
         command => $uninstall_cmd,
         onlyif  => "test -f ${name_file_path}",
         notify  => Service['kibana'],
